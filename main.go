@@ -14,20 +14,17 @@ import (
 func main() {
 	port := getEnv("APP_PORT", "8080")
 	jwtSecret := getEnv("JWT_SECRET", "change-me-in-production")
-	dbPath := getEnv("DB_PATH", "./app.db")
+	dbPath := getEnv("DB_PATH", "./app_users.json")
 
-	db, err := models.InitDB(dbPath)
+	userModel, err := models.NewUserModel(dbPath)
 	if err != nil {
-		log.Fatalf("failed to initialize database: %v", err)
+		log.Fatalf("failed to initialize user storage: %v", err)
 	}
-	defer db.Close()
 
-	userModel := models.NewUserModel(db)
 	authHandler := handlers.NewAuthHandler(userModel, []byte(jwtSecret))
 	authMiddleware := middleware.NewAuthMiddleware([]byte(jwtSecret))
 
 	mux := http.NewServeMux()
-
 	mux.HandleFunc("GET /", serveLanding)
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("public/static"))))
 	mux.Handle("/auth/", http.StripPrefix("/auth/", http.FileServer(http.Dir("public/auth"))))
@@ -46,10 +43,8 @@ func main() {
 	mux.HandleFunc("POST /api/login", authHandler.Login)
 	mux.Handle("GET /api/profile", authMiddleware.Auth(http.HandlerFunc(authHandler.Profile)))
 
-	handler := withCORS(mux)
-
 	log.Printf("server is running on http://localhost:%s", port)
-	if err := http.ListenAndServe(":"+port, handler); err != nil {
+	if err := http.ListenAndServe(":"+port, withCORS(mux)); err != nil {
 		log.Fatalf("server failed: %v", err)
 	}
 }

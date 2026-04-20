@@ -2,11 +2,9 @@ package middleware
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 
-	"github.com/golang-jwt/jwt/v5"
 	"sp_platforma/backend/handlers"
 )
 
@@ -32,42 +30,19 @@ func (m *AuthMiddleware) Auth(next http.Handler) http.Handler {
 			return
 		}
 
-		tokenStr := parts[1]
-		token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (any, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, errors.New("unexpected signing method")
-			}
-			return m.jwtSecret, nil
-		})
-		if err != nil || !token.Valid {
+		userID, email, err := handlers.ParseToken(m.jwtSecret, parts[1])
+		if err != nil {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
 			return
 		}
 
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token claims"})
-			return
-		}
-
-		idFloat, ok := claims["user_id"].(float64)
-		if !ok {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token user_id"})
-			return
-		}
-
-		email, ok := claims["email"].(string)
-		if !ok {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token email"})
-			return
-		}
-
-		ctx := handlers.WithUser(r.Context(), handlers.ContextUser{ID: int64(idFloat), Email: email})
+		ctx := handlers.WithUser(r.Context(), handlers.ContextUser{ID: userID, Email: email})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(payload)
 }
